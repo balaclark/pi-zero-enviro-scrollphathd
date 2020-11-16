@@ -3,12 +3,14 @@
 import threading
 import signal
 import time
-
-from envirophat import weather
-
+import datetime
+import os
+import json
+from random import randrange
+import requests
 import scrollphathd
-from scrollphathd.fonts import font3x5
-from scrollphathd.fonts import font5x5
+from scrollphathd.fonts import font3x5, font5x5, font5x7
+from envirophat import weather
 
 print("""
 prepare to be amazed...
@@ -18,8 +20,8 @@ prepare to be amazed...
 BRIGHTNESS = 0.2
 # heat from the pi affects the reading
 TEMP_OFFSET = 4
+NEWSAPI_KEY = os.environ['NEWSAPI_KEY']
 
-# TODO alternate between temp, clock, latest news
 # TODO report statsd, graphite dashboard
 # TODO websockets control + PWA
 # TODO slack notication count / last notification
@@ -80,17 +82,54 @@ def display_time():
     # that's 1 pixel wide and 5 pixels tall.
     if int(time.time()) % 2 == 0:
         scrollphathd.clear_rect(8, 0, 1, 5)
+
+def display_news():
+    r = requests.get('https://newsapi.org/v2/top-headlines?sources=bbc-news&apiKey={}'.format(NEWSAPI_KEY))
+    #  r = requests.get('https://newsapi.org/v2/top-headlines?sources=bbc-news,nfl-news&pageSize=1&apiKey={}'.format(NEWSAPI_KEY))
+    body = r.json()
+    article = body['articles'][randrange(10)]
+
+    #  print(json.dumps(article, indent=2))
+
+    print(u"""
+    {author}
+    {title}
+
+    {description}
+
+    {url}
+
+            * * * * * * * * * * * * * * * * * * * * * * * * 
+
+    """.format(**article))
+
+    scrollphathd.clear()
+    scrollphathd.write_string('{author} - {title}'.format(**article), x=16, y=1, font=font3x5, brightness=BRIGHTNESS)
+
         
 #  t = threading.Timer(sec)
-while True:
-    seconds = int(time.time()) % 60
 
-    if (seconds > 0 and seconds < 30):
+news_is_on = False
+
+while True:
+    now = datetime.datetime.now()
+    second = now.second
+    minute = now.minute
+
+    if (minute < 1):
+        if (news_is_on == False):
+            display_news()
+            news_is_on = True
+    elif (second > 0 and second < 15):
+        news_is_on = False
         display_temp()
-    elif (seconds > 30):
+    elif (second > 15):
         display_time()
 
     scrollphathd.show()
-    #  scrollphathd.scroll()
-    time.sleep(0.1)
 
+    if (news_is_on == True):
+        scrollphathd.scroll()
+        time.sleep(0.04)
+    else:
+        time.sleep(0.1)
